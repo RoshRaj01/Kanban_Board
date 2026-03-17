@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+    <title>CAI Task Tracker</title>
+
+    <style>
+
+        body {
+            font-family: Arial;
+            background: #f4f4f4;
+            margin: 0;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header-right {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .board {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .column {
+            flex: 1;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            min-height: 400px;
+        }
+
+        .task {
+            background: #e9ecef;
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            cursor: grab;
+        }
+
+        button {
+            padding: 8px 12px;
+            border: none;
+            background: #ff4d4d;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .dashboard-btn {
+            background: #4285F4;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        /* Softer delete button */
+        .delete-btn {
+            background: #e0e0e0;
+            color: #555;
+            border-radius: 6px;
+            padding: 5px 8px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .delete-btn:hover {
+            background: #d6d6d6;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="header">
+
+    <h2>CAI Task Tracker</h2>
+
+    <div class="header-right">
+
+        <span id="username"></span>
+
+        <button id="dashboardBtn"
+                class="dashboard-btn"
+                style="display:none"
+                onclick="goDashboard()">
+            Dashboard
+        </button>
+
+        <button onclick="logout()">Logout</button>
+
+    </div>
+
+</div>
+
+<div style="padding:20px">
+
+    <button onclick="openModal()">
+        Create Task
+    </button>
+
+    <button id="addStudentBtn"
+            style="display:none; margin-left:10px;"
+            onclick="openStudentModal()">
+        Add Student
+    </button>
+
+</div>
+
+<div class="board">
+
+    <div class="column" id="todo">
+        <h3>To Do</h3>
+    </div>
+
+    <div class="column" id="in_progress">
+        <h3>In Progress</h3>
+    </div>
+
+    <div class="column" id="done">
+        <h3>Done</h3>
+    </div>
+
+</div>
+
+
+<div id="taskModal" class="modal">
+
+    <div class="modal-content">
+
+        <h3>Create Task</h3>
+
+        <input id="modalTitle" placeholder="Task title">
+
+        <textarea id="modalDesc" placeholder="Task description"></textarea>
+
+        <input type="datetime-local" id="modalDate">
+
+        <select id="modalUser"></select>
+
+        <select id="modalPriority">
+            <option value="Low">Low</option>
+            <option value="Medium">Medium</option>
+            <option value="High">High</option>
+        </select>
+
+        <button onclick="submitTask()">Create</button>
+
+        <button onclick="closeModal()">Cancel</button>
+
+    </div>
+
+</div>
+
+<div id="studentModal" class="modal">
+
+    <div class="modal-content">
+
+        <h3>Add Student</h3>
+
+        <input id="studentName" placeholder="Student Name">
+        <input id="studentEmail" placeholder="Student Email">
+
+        <button onclick="createStudent()">Add</button>
+        <button onclick="closeStudentModal()">Cancel</button>
+
+    </div>
+
+</div>
+
+
+<script>
+
+function openStudentModal(){
+    document.getElementById("studentModal").style.display = "flex"
+}
+
+function closeStudentModal(){
+    document.getElementById("studentModal").style.display = "none"
+}
+
+
+async function createStudent(){
+
+    const name = document.getElementById("studentName").value
+    const email = document.getElementById("studentEmail").value
+
+    if(!name || !email){
+        alert("All fields required")
+        return
+    }
+
+    const res = await fetch("/users",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json"
+        },
+        body:JSON.stringify({
+            name:name,
+            email:email,
+            role:"student"
+        }),
+        credentials:"include"
+    })
+
+    const data = await res.json()
+
+    if(!res.ok){
+        alert(data.error)
+        return
+    }
+
+    alert("Student added successfully")
+
+    document.getElementById("studentName").value = ""
+    document.getElementById("studentEmail").value = ""
+
+    closeStudentModal()
+}
+
+
+function openModal(){
+
+    document.getElementById("taskModal").style.display = "flex"
+    loadUsers()
+}
+
+
+function closeModal(){
+
+    document.getElementById("taskModal").style.display = "none"
+    resetModal()
+}
+
+
+function resetModal(){
+
+    document.getElementById("modalTitle").value = ""
+    document.getElementById("modalDesc").value = ""
+    document.getElementById("modalDate").value = ""
+
+    editingTaskId = null
+}
+
+
+async function loadUsers(){
+
+    const userRes = await fetch("/me",{credentials:"include"})
+    const currentUser = await userRes.json()
+
+    const res = await fetch("/users",{credentials:"include"})
+    const users = await res.json()
+
+    const select = document.getElementById("modalUser")
+    select.innerHTML = ""
+
+    users.forEach(u => {
+
+        // 👇 STUDENT: only themselves
+        if(currentUser.role === "student"){
+            if(u.id !== currentUser.id) return
+        }
+
+        // 👇 TEACHER / ADMIN: only students
+        if(currentUser.role === "teacher" || currentUser.role === "admin"){
+            if(u.role !== "student") return
+        }
+
+        const option = document.createElement("option")
+        option.value = u.id
+        option.text = u.name
+
+        select.appendChild(option)
+    })
+}
+
+
+async function loadUser(){
+
+    const res = await fetch("/me",{credentials:"include"})
+
+    if(res.status === 403){
+        alert("Access denied. Contact admin.")
+        window.location.href = "/"
+        return
+    }
+
+    if(res.status !== 200){
+        window.location.href = "/"
+        return
+    }
+
+    const user = await res.json()
+
+    document.getElementById("username").innerText =
+        "Logged in as: " + user.name + " (" + user.role + ")"
+
+    // show dashboard button only for admin
+    if(user.role === "admin"){
+        const btn = document.getElementById("dashboardBtn")
+        if(btn) btn.style.display = "inline-block"
+    }
+
+    if(user.role === "teacher"){
+        document.getElementById("addStudentBtn").style.display = "inline-block"
+    }
+}   
+
+
+async function deleteUser(id){
+
+    const confirmDelete = confirm("Delete this user?")
+
+    if(!confirmDelete) return
+
+    await fetch(`/users/${id}`,{
+        method:"DELETE",
+        credentials:"include"
+    })
+
+    loadUsers()
+}
+
+
+async function loadBoard() {
+
+    const res = await fetch("/board", { credentials: "include" });
+    const data = await res.json();
+
+    document.getElementById("todo").innerHTML = "<h3>To Do</h3>";
+    document.getElementById("in_progress").innerHTML = "<h3>In Progress</h3>";
+    document.getElementById("done").innerHTML = "<h3>Done</h3>";
+
+    data.todo.forEach(t => addTask(t, "todo"));
+    data.in_progress.forEach(t => addTask(t, "in_progress"));
+    data.done.forEach(t => addTask(t, "done"));
+
+}
+
+
+let editingTaskId = null
+
+async function editTask(event, id){
+
+    event.stopPropagation()
+
+    editingTaskId = id
+
+    await loadUsers()
+
+    const res = await fetch("/tasks", { credentials: "include" })
+    const tasks = await res.json()
+
+    const task = tasks.find(t => t.id === id)
+
+    document.getElementById("modalTitle").value = task.title
+    document.getElementById("modalDesc").value = task.description || ""
+    document.getElementById("modalDate").value = task.due_date ? task.due_date.slice(0,16) : ""
+    document.getElementById("modalUser").value = task.assigned_to || ""
+
+    openModal()
+}
+
+
+function addTask(task, column){
+
+    const div = document.createElement("div")
+    div.className = "task"
+
+    const isOverdue = task.due_date && new Date(task.due_date) < new Date()
+
+    div.style.borderLeft =
+        task.priority === "High" ? "5px solid red" :
+        task.priority === "Medium" ? "5px solid orange" :
+        "5px solid green"
+
+    div.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+            <b>${task.title}</b>
+
+            <div>
+                <button class="delete-btn" onclick="editTask(event, ${task.id})">✏️</button>
+                <button class="delete-btn" onclick="deleteTask(event, ${task.id})">🗑️</button>
+            </div>
+        </div>
+
+        <small>${task.description || ""}</small><br>
+
+        👤 ${task.assigned_user}<br>
+
+        📅 ${formatDateTime(task.due_date)}<br>
+
+        ${column !== "done" ? `
+        ⏳ <span style="color:${isOverdue ? 'red' : '#555'}">
+            ${getCountdown(task.due_date)}
+        </span>
+        ` : ""}
+    `
+
+    div.draggable = true
+    div.dataset.id = task.id
+
+    div.addEventListener("dragstart", e=>{
+        e.dataTransfer.setData("taskId", task.id)
+    })
+
+    document.getElementById(column).appendChild(div)
+}
+
+
+async function submitTask(){
+
+    const title = document.getElementById("modalTitle").value
+    const desc = document.getElementById("modalDesc").value
+    const date = document.getElementById("modalDate").value
+    const priority = document.getElementById("modalPriority").value
+    const userRes = await fetch("/me",{credentials:"include"})
+    const currentUser = await userRes.json()
+
+    let user = document.getElementById("modalUser").value
+
+    if(currentUser.role === "student"){
+        user = currentUser.id
+    }
+
+    if(!title){
+        alert("Title required")
+        return
+    }
+
+    const payload = {
+        title: title,
+        description: desc,
+        due_date: date,
+        assigned_to: user,
+        priority: priority
+    }
+
+    if(editingTaskId){
+
+        await fetch(`/tasks/${editingTaskId}`,{
+            method:"PUT",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify(payload),
+            credentials:"include"
+        })
+
+        editingTaskId = null
+
+    } else {
+
+        await fetch("/tasks",{
+            method:"POST",
+            headers:{ "Content-Type":"application/json" },
+            body:JSON.stringify(payload),
+            credentials:"include"
+        })
+    }
+
+    resetModal()
+    closeModal()
+    loadBoard()
+}
+
+
+async function deleteTask(event, id){
+
+    event.stopPropagation()
+
+    const confirmDelete = confirm("Are you sure you want to delete this task?")
+
+    if(!confirmDelete) return
+
+    await fetch(`/tasks/${id}`,{
+        method:"DELETE",
+        credentials:"include"
+    })
+
+    loadBoard()
+}
+
+
+function formatDateTime(dt){
+
+    if(!dt) return ""
+
+    const date = new Date(dt)
+
+    const formatted =
+        date.toLocaleDateString() + " " +
+        date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+
+    return formatted
+}
+
+
+function getCountdown(dt){
+
+    if(!dt) return ""
+
+    const now = new Date()
+    const due = new Date(dt)
+
+    const diff = due - now
+
+    if(diff < 0){
+        return "Overdue"
+    }
+
+    const hours = Math.floor(diff / (1000 * 60 * 60))
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+
+    return `Due in ${hours}h ${minutes}m`
+}
+
+
+function goDashboard() {
+
+    window.location.href = "/admin";
+
+}
+
+
+function logout() {
+
+    window.location.href = "/logout";
+
+}
+
+
+["todo","in_progress","done"].forEach(column => {
+
+    const col = document.getElementById(column);
+
+    col.addEventListener("dragover", e => e.preventDefault());
+
+    col.addEventListener("drop", async e => {
+
+        const taskId = e.dataTransfer.getData("taskId");
+
+        await fetch(`/tasks/${taskId}/status`, {
+
+            method: "PUT",
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                status: column
+            }),
+
+            credentials: "include"
+
+        });
+
+        loadBoard();
+
+    });
+
+});
+
+
+loadUser();
+loadBoard();
+
+</script>
+
+</body>
+</html>
