@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+	<title>CAI Tracker Login</title>
+
+	<style>
+
+		body{
+			font-family:Arial;
+			background:linear-gradient(135deg,#4facfe,#00f2fe);
+			height:100vh;
+			display:flex;
+			justify-content:center;
+			align-items:center;
+		}
+
+		.login-box{
+			background:white;
+			padding:40px;
+			border-radius:12px;
+			text-align:center;
+			box-shadow:0 10px 30px rgba(0,0,0,0.2);
+		}
+
+		button{
+			padding:12px 20px;
+			border:none;
+			background:#4285F4;
+			color:white;
+			font-size:16px;
+			border-radius:6px;
+			cursor:pointer;
+		}
+
+		button:hover{
+			background:#357ae8;
+		}
+
+	</style>
+
+</head>
+
+<body>
+
+	<div class="login-box">
+
+		<h2>CAI Project Tracker</h2>
+
+		<p>Login to continue</p>
+
+		<button onclick="login()">
+			Login with Google
+		</button>
+
+	</div>
+
+	<script>
+
+		const params = new URLSearchParams(window.location.search)
+
+		if(params.get("error") === "not_allowed"){
+			alert("Access denied. Contact admin.")
+		}
+
+		function login(){
+
+			window.location.href="/auth/google"
+
+		}
+
+	</script>
+
+</body>
+</html>

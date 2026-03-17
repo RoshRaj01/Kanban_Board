@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+    <title>Admin Dashboard</title>
+
+    <style>
+
+        body {
+            font-family: Arial;
+            background: #f4f4f4;
+            margin: 0;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            background: white;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .container {
+            padding: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        button {
+            padding: 6px 10px;
+            border: none;
+            background: #ff4d4d;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button.secondary {
+            background: #4285F4;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+
+
+        th {
+            text-align: left;
+            padding: 10px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        td {
+            padding: 10px;
+            vertical-align: middle;
+        }
+
+        tr {
+            border-bottom: 1px solid #eee;
+        }
+
+        input, select {
+            padding: 8px;
+            margin: 8px 0;
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+
+        /* Column alignment fix */
+        th:nth-child(1), td:nth-child(1) { width: 25%; }
+        th:nth-child(2), td:nth-child(2) { width: 40%; }
+        th:nth-child(3), td:nth-child(3) { width: 15%; text-transform: capitalize; }
+        th:nth-child(4), td:nth-child(4) { width: 10%; text-align: center; }
+
+        /* Softer delete button */
+        .delete-btn {
+            background: #e0e0e0;
+            color: #555;
+            border-radius: 6px;
+            padding: 5px 8px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .delete-btn:hover {
+            background: #d6d6d6;
+        }
+
+    </style>
+
+</head>
+
+<body>
+
+<div class="header">
+    <h2>Admin Dashboard</h2>
+
+    <div>
+        <span id="username"></span>
+        <button onclick="logout()">Logout</button>
+    </div>
+</div>
+
+<div class="container">
+
+    <div class="card">
+        <h3>System Overview</h3>
+        <p>Total Users: <span id="userCount"></span></p>
+        <p>Total Tasks: <span id="taskCount"></span></p>
+    </div>
+
+    <div class="card">
+        <h3>Create User</h3>
+
+        <input id="name" placeholder="Name">
+        <input id="email" placeholder="Email">
+
+        <select id="role">
+            <option value="student">Student</option>
+            <option value="teacher">Teacher</option>
+            <option value="admin">Admin</option>
+        </select>
+
+        <button onclick="createUser()">Create User</button>
+    </div>
+
+    <div class="card">
+
+        <h3>Users</h3>
+
+        <table>
+
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+
+            <tbody id="userTable"></tbody>
+
+        </table>
+
+    </div>
+
+    <div class="card">
+        <h3>Board Access</h3>
+        <button class="secondary" onclick="openBoard()">Open Kanban Board</button>
+    </div>
+
+</div>
+
+<script>
+
+async function loadUser(){
+
+    const res = await fetch("/me",{credentials:"include"})
+
+    if(res.status === 403){
+        alert("Access denied. Contact admin.")
+        window.location.href = "/"
+        return
+    }
+
+    if(res.status !== 200){
+        window.location.href = "/"
+        return
+    }
+
+    const user = await res.json()
+
+    document.getElementById("username").innerText =
+        "Logged in as: " + user.name + " (" + user.role + ")"
+
+    // show dashboard button only for admin
+    if(user.role === "admin"){
+        const btn = document.getElementById("dashboardBtn")
+        if(btn) btn.style.display = "inline-block"
+    }
+}
+
+
+async function loadUsers(){
+
+    const res = await fetch("/users",{credentials:"include"})
+    const users = await res.json()
+
+    const currentRes = await fetch("/me",{credentials:"include"})
+    const currentUser = await currentRes.json()
+
+    const table = document.getElementById("userTable")
+    table.innerHTML = ""
+
+    users.forEach(u => {
+
+        const isCurrentUser = u.id === currentUser.id
+
+        const row = document.createElement("tr")
+
+        row.innerHTML = `
+            <td>${u.name}</td>
+            <td>${u.email}</td>
+            <td>${u.role}</td>
+            <td>
+                ${  
+                    isCurrentUser
+                    ? '<span style="color:#888; font-size:12px;">(You)</span>'
+                    : `<button class="delete-btn" onclick="deleteUser(${u.id})">🗑️</button>`
+                }
+            </td>
+        `
+
+        table.appendChild(row)
+    })
+
+    document.getElementById("userCount").innerText = users.length
+}
+
+async function loadTasks(){
+
+    const res = await fetch("/tasks",{credentials:"include"})
+    const tasks = await res.json()
+
+    document.getElementById("taskCount").innerText = tasks.length
+}
+
+async function createUser(){
+
+    const name = document.getElementById("name").value
+    const email = document.getElementById("email").value
+    const role = document.getElementById("role").value
+
+    const res = await fetch("/users",{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body:JSON.stringify({name,email,role}),
+        credentials:"include"
+    })
+
+    const data = await res.json()
+
+    if(!res.ok){    
+        alert(data.error)
+        return
+    }
+
+    loadUsers()
+}
+
+async function deleteUser(id){
+
+    const confirmDelete = confirm("Are you sure you want to delete this user?")
+
+    if(!confirmDelete) return
+
+    await fetch(`/users/${id}`,{
+        method:"DELETE",
+        credentials:"include"
+    })
+
+    loadUsers()
+}
+
+function openBoard(){
+    window.location.href="/board_page"
+}
+
+function logout(){
+    window.location.href="/logout"
+}
+
+loadUser()
+loadUsers()
+loadTasks()
+
+</script>
+
+</body>
+</html>
